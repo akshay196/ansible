@@ -1402,6 +1402,17 @@ class TaskParameters(DockerBaseClass):
                         result[key] = time
                 elif self.healthcheck.get(value):
                     result[key] = self.healthcheck.get(value)
+                    if key == 'test':
+                        if isinstance(result[key], (tuple, list)):
+                            result[key] = [str(e) for e in result[key]]
+                        else:
+                            result[key] = str(result[key])
+                    elif key == 'retries':
+                        try:
+                            result[key] = int(result[key])
+                        except Exception as e:
+                            self.fail('Cannot parse number of retries for healthcheck. '
+                                      'Expected an integer, got "{0}".'.format(result[key]))
 
         return result
 
