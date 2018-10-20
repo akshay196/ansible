@@ -694,8 +694,9 @@ EXAMPLES = '''
     name: nginx-proxy
     image: nginx:1.13
     state: started
-    # Simply not specifying healthcheck
-    healthcheck: {}
+    healthcheck:
+      # The "NONE" check needs to be specified
+      test: ["NONE"]
 '''
 
 RETURN = '''
@@ -956,8 +957,7 @@ class TaskParameters(DockerBaseClass):
         self.ulimits = self._parse_ulimits()
         self.sysctls = self._parse_sysctls()
         self.log_config = self._parse_log_config()
-        self.disable_healthcheck = True if self.healthcheck is not None and not self.healthcheck.get('test') else None
-        self.healthcheck = self._parse_healthcheck()
+        self.healthcheck, self.disable_healthcheck = self._parse_healthcheck()
         self.exp_links = None
         self.volume_binds = self._get_volume_binds(self.volumes)
 
@@ -1379,7 +1379,7 @@ class TaskParameters(DockerBaseClass):
         Return dictionary of healthcheck parameters
         '''
         if (not self.healthcheck) or (not self.healthcheck.get('test')):
-            return None
+            return None, None
 
         result = dict()
 
@@ -1414,7 +1414,12 @@ class TaskParameters(DockerBaseClass):
                             self.fail('Cannot parse number of retries for healthcheck. '
                                       'Expected an integer, got "{0}".'.format(result[key]))
 
-        return result
+        if result['test'] == ['NONE']:
+            # If the user explicitly disables the healthcheck, return None
+            # as the healthcheck object, and set disable_healthcheck to True
+            return None, True
+
+        return result, False
 
     def _convert_duration_to_nanosecond(self, time_str):
         '''
@@ -1696,8 +1701,8 @@ class Container(DockerBaseClass):
             volumes_from=host_config.get('VolumesFrom'),
             working_dir=config.get('WorkingDir'),
             publish_all_ports=host_config.get('PublishAllPorts'),
-            expected_healthcheck=(config.get('Healthcheck') or dict()),
-            disable_healthcheck=(not config.get('Healthcheck')),
+            expected_healthcheck=config.get('Healthcheck'),
+            disable_healthcheck=(not config.get('Healthcheck') or config.get('Healthcheck').get('Test') == ['NONE']),
         )
         if self.parameters.restart_policy:
             config_mapping['restart_retries'] = restart_policy.get('MaximumRetryCount')
